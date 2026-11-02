@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,9 +21,10 @@ export function PayPalCheckoutPanel({
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [approveUrl, setApproveUrl] = useState<string | null>(null);
   const orderRef = useRef<string | null>(null);
 
-  const createOrder = useCallback(async () => {
+  const createOrderOnServer = useCallback(async () => {
     setError(null);
     const res = await fetch("/api/paypal/orders", {
       method: "POST",
@@ -31,11 +32,12 @@ export function PayPalCheckoutPanel({
       body: JSON.stringify({ leadId: lead.id }),
     });
     const data = (await res.json()) as {
-      order?: { id: string };
+      order?: { id: string; approveUrl?: string };
       error?: string;
     };
     if (!res.ok) throw new Error(data.error ?? "Could not create order");
     orderRef.current = data.order!.id;
+    if (data.order?.approveUrl) setApproveUrl(data.order.approveUrl);
     return data.order!.id;
   }, [lead.id]);
 
@@ -71,11 +73,35 @@ export function PayPalCheckoutPanel({
     setBusy(true);
     setError(null);
     try {
-      const orderId = await createOrder();
+      const orderId = await createOrderOnServer();
       await finalizePayment(orderId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Payment failed");
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const startRedirectCheckout = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/paypal/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: lead.id }),
+      });
+      const data = (await res.json()) as {
+        order?: { id: string; approveUrl?: string };
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Could not create order");
+      if (!data.order?.approveUrl) {
+        throw new Error("PayPal did not return an approve link.");
+      }
+      window.location.href = data.order.approveUrl;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start PayPal");
       setBusy(false);
     }
   };
@@ -122,33 +148,52 @@ export function PayPalCheckoutPanel({
             </Button>
             <p className="text-xs text-muted-foreground">
               Demo mode uses mock orders and simulates the PayPal webhook locally.
-              Add sandbox credentials to enable live PayPal Smart Buttons.
+              Set PAYPAL_SANDBOX_CLIENT_ID and PAYPAL_SANDBOX_CLIENT_SECRET for
+              real sandbox Smart Buttons.
             </p>
           </div>
         ) : (
-          <PayPalScriptProvider
-            options={{
-              clientId: paypalClientId,
-              currency: lead.quote.currency,
-              intent: "capture",
-            }}
-          >
-            <PayPalButtons
-              style={{ layout: "vertical", shape: "rect" }}
-              createOrder={createOrder}
-              onApprove={async (data) => {
-                setBusy(true);
-                try {
-                  await finalizePayment(data.orderID);
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : "Capture failed");
-                } finally {
-                  setBusy(false);
-                }
+          <div className="space-y-3">
+            <PayPalScriptProvider
+              options={{
+                clientId: paypalClientId,
+                currency: lead.quote.currency,
+                intent: "capture",
               }}
-              onError={() => setError("PayPal checkout error")}
-            />
-          </PayPalScriptProvider>
+            >
+              <PayPalButtons
+                style={{ layout: "vertical", shape: "rect" }}
+                createOrder={createOrderOnServer}
+                onApprove={async (data) => {
+                  setBusy(true);
+                  try {
+                    await finalizePayment(data.orderID);
+                  } catch (e) {
+                    setError(
+                      e instanceof Error ? e.message : "Capture failed",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                onError={() => setError("PayPal checkout error")}
+              />
+            </PayPalScriptProvider>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={busy}
+              onClick={() => void startRedirectCheckout()}
+            >
+              {busy ? "Redirecting…" : "Pay on PayPal (approve link)"}
+            </Button>
+            {approveUrl ? (
+              <p className="text-xs text-muted-foreground break-all">
+                Approve URL ready (also used by redirect button above).
+              </p>
+            ) : null}
+          </div>
         )}
       </CardContent>
     </Card>

@@ -37,17 +37,27 @@ cp .env.example .env.local
 
 | Variable | Purpose |
 |----------|---------|
-| `PAYPAL_CLIENT_ID` | Sandbox REST app client ID |
-| `PAYPAL_CLIENT_SECRET` | Sandbox REST app secret |
-| `PAYPAL_WEBHOOK_ID` | Webhook ID from PayPal Developer Dashboard |
-| `PAYPAL_ENV` | `sandbox` (default) or `live` — **use sandbox for hackathon** |
+| `PAYPAL_SANDBOX_CLIENT_ID` | Sandbox REST app Client ID (primary) |
+| `PAYPAL_SANDBOX_CLIENT_SECRET` | Sandbox REST app Secret |
+| `PAYPAL_WEBHOOK_ID` | Webhook ID from PayPal Developer Dashboard (optional locally; required for verified webhooks in sandbox) |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | Legacy fallback names |
 | `LLM_API_KEY` | OpenAI-compatible API key (optional) |
 | `LLM_BASE_URL` | API base (default OpenAI) |
 | `LLM_MODEL` | Model name (default `gpt-4o-mini`) |
 | `APP_URL` | Public URL for return links and webhook registration |
 | `DEMO_MODE` | Set `true` to force mock PayPal even if credentials exist |
 
-When both PayPal client ID and secret are missing or still placeholders, the app stays in **demo mode** automatically.
+When `PAYPAL_SANDBOX_CLIENT_ID` and `PAYPAL_SANDBOX_CLIENT_SECRET` are missing or still placeholders, the app stays in **demo mode** automatically. API base for sandbox is always `https://api-m.sandbox.paypal.com` unless you opt into live via `PAYPAL_ENV=live` (hackathon: stay on sandbox).
+
+### PayPal sandbox smoke test (CLI)
+
+With real sandbox credentials in `.env.local` (never commit):
+
+```bash
+npm run smoke:sandbox
+```
+
+Prints only JSON `{ "orderId", "status" }` after OAuth + Orders v2 create. Does not log secrets or access tokens.
 
 ### PayPal sandbox webhook (production-like testing)
 
@@ -70,6 +80,7 @@ Demo mode skips signature verification and accepts simulated events via `POST /a
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
 | `npm test` | Vitest unit tests (quotes, webhooks, payment lifecycle) |
+| `npm run smoke:sandbox` | OAuth + create sandbox order (requires `PAYPAL_SANDBOX_*` in env) |
 
 ## Deploy on Render
 
@@ -92,8 +103,9 @@ Judges can use **demo mode** without credentials, or log into PayPal sandbox as 
 
 ```text
 Lead chat → Agent (LLM or rules) → Quote engine (guardrails)
-    → POST /api/paypal/orders (create order)
-    → PayPal JS SDK or demo capture
+    → POST /api/paypal/orders (create order + approve link)
+    → PayPal JS SDK, redirect approve link, or demo capture
+    → /checkout/return (capture after redirect)
     → POST /api/webhooks/paypal (verified) → SQLite lead status = paid → onboarding step
 ```
 

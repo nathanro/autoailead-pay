@@ -5,29 +5,47 @@ function env(name: string): string | undefined {
   return v && v.trim().length > 0 ? v.trim() : undefined;
 }
 
+function isPlaceholder(value: string): boolean {
+  const lower = value.toLowerCase();
+  return (
+    lower.startsWith("your_") ||
+    lower.includes("placeholder") ||
+    lower === "changeme"
+  );
+}
+
+/** Primary: PAYPAL_SANDBOX_* ; legacy fallback: PAYPAL_CLIENT_* */
+export function getPayPalSandboxClientId(): string | undefined {
+  return env("PAYPAL_SANDBOX_CLIENT_ID") ?? env("PAYPAL_CLIENT_ID");
+}
+
+export function getPayPalSandboxClientSecret(): string | undefined {
+  return env("PAYPAL_SANDBOX_CLIENT_SECRET") ?? env("PAYPAL_CLIENT_SECRET");
+}
+
 export function isDemoMode(): boolean {
   if (env("DEMO_MODE") === "true") return true;
-  const clientId = env("PAYPAL_CLIENT_ID");
-  const secret = env("PAYPAL_CLIENT_SECRET");
+  const clientId = getPayPalSandboxClientId();
+  const secret = getPayPalSandboxClientSecret();
   if (!clientId || !secret) return true;
-  if (clientId.startsWith("your_") || secret.startsWith("your_")) return true;
+  if (isPlaceholder(clientId) || isPlaceholder(secret)) return true;
   return false;
 }
 
 export function isLlmConfigured(): boolean {
   const key = env("LLM_API_KEY");
-  if (!key || key.startsWith("your_")) return false;
+  if (!key || isPlaceholder(key)) return false;
   return true;
 }
 
 export function getAppMode(): AppMode {
   const demoMode = isDemoMode();
-  const clientId = env("PAYPAL_CLIENT_ID");
+  const clientId = getPayPalSandboxClientId();
   return {
     demoMode,
     paypalConfigured: !demoMode,
     llmConfigured: isLlmConfigured(),
-    paypalEnv: env("PAYPAL_ENV") === "live" ? "live" : "sandbox",
+    paypalEnv: "sandbox",
     paypalClientId: demoMode ? null : (clientId ?? null),
   };
 }
@@ -37,9 +55,10 @@ export function getAppUrl(): string {
 }
 
 export function getPayPalApiBase(): string {
-  return getAppMode().paypalEnv === "live"
-    ? "https://api-m.paypal.com"
-    : "https://api-m.sandbox.paypal.com";
+  if (env("PAYPAL_ENV") === "live") {
+    return "https://api-m.paypal.com";
+  }
+  return "https://api-m.sandbox.paypal.com";
 }
 
 export function getPayPalCredentials(): {
@@ -47,14 +66,16 @@ export function getPayPalCredentials(): {
   clientSecret: string;
 } | null {
   if (isDemoMode()) return null;
-  const clientId = env("PAYPAL_CLIENT_ID");
-  const clientSecret = env("PAYPAL_CLIENT_SECRET");
+  const clientId = getPayPalSandboxClientId();
+  const clientSecret = getPayPalSandboxClientSecret();
   if (!clientId || !clientSecret) return null;
   return { clientId, clientSecret };
 }
 
 export function getWebhookId(): string | undefined {
-  return env("PAYPAL_WEBHOOK_ID");
+  const id = env("PAYPAL_WEBHOOK_ID");
+  if (!id || isPlaceholder(id)) return undefined;
+  return id;
 }
 
 export function getLlmConfig(): {
@@ -63,7 +84,7 @@ export function getLlmConfig(): {
   model: string;
 } | null {
   const apiKey = env("LLM_API_KEY");
-  if (!apiKey || apiKey.startsWith("your_")) return null;
+  if (!apiKey || isPlaceholder(apiKey)) return null;
   return {
     apiKey,
     baseUrl: env("LLM_BASE_URL") ?? "https://api.openai.com/v1",

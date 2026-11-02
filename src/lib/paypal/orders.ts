@@ -1,8 +1,5 @@
-import {
-  getPayPalApiBase,
-  getPayPalCredentials,
-  isDemoMode,
-} from "@/lib/config";
+import { getAppUrl, getPayPalApiBase, isDemoMode } from "@/lib/config";
+import { getPayPalAccessToken } from "@/lib/paypal/client";
 import { randomUUID } from "node:crypto";
 
 export interface CreateOrderInput {
@@ -19,28 +16,6 @@ export interface PayPalOrderResult {
   approveUrl?: string;
 }
 
-async function fetchAccessToken(): Promise<string> {
-  const creds = getPayPalCredentials();
-  if (!creds) throw new Error("PayPal credentials not configured");
-  const auth = Buffer.from(
-    `${creds.clientId}:${creds.clientSecret}`,
-  ).toString("base64");
-  const res = await fetch(`${getPayPalApiBase()}/v1/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`PayPal token error: ${res.status} ${text}`);
-  }
-  const data = (await res.json()) as { access_token: string };
-  return data.access_token;
-}
-
 export async function createPayPalOrder(
   input: CreateOrderInput,
 ): Promise<PayPalOrderResult> {
@@ -49,12 +24,14 @@ export async function createPayPalOrder(
       id: `MOCK-ORDER-${randomUUID().slice(0, 8).toUpperCase()}`,
       status: "CREATED",
       demo: true,
+      approveUrl: undefined,
     };
   }
 
-  const token = await fetchAccessToken();
+  const token = await getPayPalAccessToken();
   const value = (input.amountCents / 100).toFixed(2);
   const currency = input.currency ?? "USD";
+  const base = getAppUrl();
 
   const res = await fetch(`${getPayPalApiBase()}/v2/checkout/orders`, {
     method: "POST",
@@ -77,7 +54,10 @@ export async function createPayPalOrder(
       ],
       application_context: {
         brand_name: "BrightPath Digital",
+        landing_page: "NO_PREFERENCE",
         user_action: "PAY_NOW",
+        return_url: `${base}/checkout/return?leadId=${encodeURIComponent(input.leadId)}`,
+        cancel_url: `${base}/checkout/cancel?leadId=${encodeURIComponent(input.leadId)}`,
       },
     }),
   });
@@ -101,6 +81,26 @@ export async function createPayPalOrder(
   };
 }
 
+export async function getPayPalOrder(orderId: string): Promise<{
+  id: string;
+  status: string;
+}> {
+  if (isDemoMode() || orderId.startsWith("MOCK-ORDER-")) {
+    return { id: orderId, status: "CREATED" };
+  }
+
+  const token = await getPayPalAccessToken();
+  const res = await fetch(`${getPayPalApiBase()}/v2/checkout/orders/${orderId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`PayPal get order failed: ${res.status} ${text}`);
+  }
+  const data = (await res.json()) as { id: string; status: string };
+  return { id: data.id, status: data.status };
+}
+
 export async function capturePayPalOrder(orderId: string): Promise<{
   id: string;
   status: string;
@@ -116,7 +116,7 @@ export async function capturePayPalOrder(orderId: string): Promise<{
     };
   }
 
-  const token = await fetchAccessToken();
+  const token = await getPayPalAccessToken();
   const res = await fetch(
     `${getPayPalApiBase()}/v2/checkout/orders/${orderId}/capture`,
     {
@@ -152,4 +152,14 @@ export function applyCaptureToLeadAmount(
 ): number {
   if (capture.demo || capture.amountCents === 0) return expectedCents;
   return capture.amountCents;
+}
+
+/** Minimal order for CLI smoke test (no lead record required). */
+export async function createSmokeTestOrder(): Promise<PayPalOrderResult> {
+  return createPayPalOrder({
+    leadId: "smoke-test",
+    amountCents: 100,
+    currency: "USD",
+    description: "AutoAI Lead Pay sandbox smoke test",
+  });
 }

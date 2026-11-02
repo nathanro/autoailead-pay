@@ -13,9 +13,9 @@ services:
         value: sandbox
       - key: APP_URL
         sync: false
-      - key: PAYPAL_CLIENT_ID
+      - key: PAYPAL_SANDBOX_CLIENT_ID
         sync: false
-      - key: PAYPAL_CLIENT_SECRET
+      - key: PAYPAL_SANDBOX_CLIENT_SECRET
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false

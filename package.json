@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 43123",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke:sandbox": "tsx scripts/smoke-sandbox.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -35,9 +36,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.2",
+    "dotenv": "^18.0.9",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }
