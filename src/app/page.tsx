@@ -1,9 +1,11 @@
+import { connection } from "next/server";
 import { LeadChatExperience } from "@/components/lead-chat";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAppMode } from "@/lib/config";
 
-export default function HomePage() {
+export default async function HomePage() {
+  await connection();
   const mode = getAppMode();
 
   return (

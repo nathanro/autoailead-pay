@@ -4,6 +4,8 @@
 
 > **Built during the hackathon period (Oct 1 – Nov 12, 2026)** for the [PayPal AI Hackathon on Devpost](https://paypalaihackathon.devpost.com/). PayPal **sandbox only**.
 
+**Live demo:** [https://pay.autoailead.com](https://pay.autoailead.com) (PayPal sandbox).
+
 **AutoAI Lead Pay** is a full-cycle **AI sales closer** for agencies and small businesses in the US and LatAm. It is not an appointment setter: one conversation qualifies the lead, answers objections within real business rules, produces a quote, and collects the **deposit via PayPal**—then marks the lead **paid** and starts onboarding when PayPal confirms payment.
 
 ## Why PayPal is central (not decorative)

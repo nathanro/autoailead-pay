@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, connection } from "next/server";
 import { getAppMode } from "@/lib/config";
 import { BUSINESS, SERVICES } from "@/lib/business-config";
 
 export async function GET() {
+  await connection();
   const mode = getAppMode();
   return NextResponse.json({
     business: {

@@ -2,6 +2,7 @@ import { SiteHeader } from "@/components/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { getAppMode } from "@/lib/config";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -21,7 +22,8 @@ export const metadata: Metadata = {
     "Qualify inbound leads, generate guarded quotes, and collect deposits with PayPal sandbox checkout.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  await connection();
   const mode = getAppMode();
   return (
     <html
