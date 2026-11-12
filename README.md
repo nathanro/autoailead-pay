@@ -1,76 +1,115 @@
 # AutoAI Lead Pay
 
-**AutoAI Lead Pay** is an AI-powered sales closer for agencies and small businesses (US + LatAm). It chats with inbound leads, qualifies them, handles price/trust/timing objections using verified business data and margin guardrails, generates a tailored quote, and collects the deposit through **PayPal**—with webhooks that mark the lead as paid and start onboarding.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Built for the [PayPal AI Hackathon on Devpost](https://paypalaihackathon.devpost.com/) (sandbox only). License: **MIT**.
+> **Built during the hackathon period (Oct 1 – Nov 12, 2026)** for the [PayPal AI Hackathon on Devpost](https://paypalaihackathon.devpost.com/). PayPal **sandbox only**.
 
-## Features (MVP)
+**AutoAI Lead Pay** is a full-cycle **AI sales closer** for agencies and small businesses in the US and LatAm. It is not an appointment setter: one conversation qualifies the lead, answers objections within real business rules, produces a quote, and collects the **deposit via PayPal**—then marks the lead **paid** and starts onboarding when PayPal confirms payment.
 
-- AI closer chat (rule-based demo agent, optional OpenAI-compatible LLM when configured)
-- Guardrailed quote engine (max discount per service, minimum prices, deposit %)
-- PayPal Checkout **Orders v2** (Smart Buttons when sandbox credentials are set)
-- PayPal webhook endpoint with signature verification (mock-friendly demo mode)
-- Leads / payments dashboard (**AG Grid** community)
-- Light / dark theme toggle, responsive layout (375px+)
-- **Demo mode** runs without any secrets (mock PayPal + simulated webhook)
+## Why PayPal is central (not decorative)
 
-## Quick start (demo mode)
+PayPal is the payment and trust layer of the product—not a footer logo.
 
-Requirements: **Node.js 20+**
+| PayPal capability | Role in AutoAI Lead Pay |
+|-------------------|-------------------------|
+| **Orders v2 – Create** | Server creates a deposit order tied to the lead and quote (`POST /api/paypal/orders`). |
+| **Orders v2 – Approve** | Buyer approves via PayPal Smart Buttons or redirect to PayPal’s `approve` link. |
+| **Orders v2 – Capture** | Server captures funds after approval (`PUT /api/paypal/orders` or `/checkout/return`). |
+| **Webhooks + verification** | `POST /api/webhooks/paypal` calls PayPal’s verify-signature API (`PAYPAL_WEBHOOK_ID`) on `PAYMENT.CAPTURE.COMPLETED` and updates lead status to **paid**. |
+
+All API calls target **`https://api-m.sandbox.paypal.com`** in hackathon configuration.
+
+## What it does
+
+1. **Chat** — AI closer (rule-based demo or optional OpenAI-compatible LLM) qualifies service, budget, and timing.
+2. **Objections** — Price, trust, and timing handled with verified playbook copy; quotes cannot exceed configured max discounts.
+3. **Quote** — Guardrailed catalog pricing and 40% deposit.
+4. **Checkout** — PayPal Orders v2 (buttons or redirect).
+5. **Paid + onboarding** — Capture and/or verified webhook sets status to `paid` and advances onboarding.
+6. **Dashboard** — AG Grid table of leads, quotes, orders, and payment state.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Client
+    UI[Next.js UI]
+    Chat[AI Closer Chat]
+    PPBtn[PayPal JS SDK]
+  end
+  subgraph App
+    Agent[Agent + Guardrails]
+    Quote[Quote Engine]
+    API[API Routes]
+    DB[(SQLite leads.db)]
+  end
+  subgraph PayPal Sandbox
+    OAuth[OAuth2 token]
+    Orders[Orders v2]
+    WH[Webhooks]
+  end
+
+  Chat --> Agent --> Quote
+  Quote --> API
+  PPBtn --> API
+  API --> OAuth --> Orders
+  Orders -->|approve + capture| API
+  WH -->|PAYMENT.CAPTURE.COMPLETED| API
+  API --> DB
+  UI --> Dashboard[AG Grid Dashboard]
+  Dashboard --> DB
+```
+
+## AI tools used
+
+| Tool | Use |
+|------|-----|
+| **Cursor (Cloud Agent)** | Application design, implementation, tests, and documentation. |
+| **Optional `LLM_API_KEY`** | OpenAI-compatible chat for natural language when configured; otherwise a deterministic rule-based closer for demo and judging without API keys. |
+
+No paid third-party services are required beyond optional LLM calls and PayPal sandbox.
+
+## Quick start (demo mode — no secrets)
+
+**Node.js 20+**
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:43123](http://localhost:43123). You should see a **Demo mode** badge. Walk through chat → quote → **Pay with PayPal (demo sandbox UI)** → check **Dashboard** for `paid` status.
+Open [http://localhost:43123](http://localhost:43123). With no credentials, **Demo mode** is on: mock orders and simulated webhook.
 
-No `.env` file is required for demo mode.
+Flow: chat → quote → **Pay with PayPal (demo)** → **Dashboard** shows `paid`.
 
-## Configuration
+## Setup (PayPal sandbox)
 
-Copy the example env file (placeholders only—never commit real secrets):
+1. Copy env template (names only—**never commit** `.env.local`):
 
-```bash
-cp .env.example .env.local
-```
+   ```bash
+   cp .env.example .env.local
+   ```
 
-| Variable | Purpose |
-|----------|---------|
-| `PAYPAL_SANDBOX_CLIENT_ID` | Sandbox REST app Client ID (primary) |
-| `PAYPAL_SANDBOX_CLIENT_SECRET` | Sandbox REST app Secret |
-| `PAYPAL_WEBHOOK_ID` | Webhook ID from PayPal Developer Dashboard (optional locally; required for verified webhooks in sandbox) |
-| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | Legacy fallback names |
-| `LLM_API_KEY` | OpenAI-compatible API key (optional) |
-| `LLM_BASE_URL` | API base (default OpenAI) |
-| `LLM_MODEL` | Model name (default `gpt-4o-mini`) |
-| `APP_URL` | Public URL for return links and webhook registration |
-| `DEMO_MODE` | Set `true` to force mock PayPal even if credentials exist |
+2. Set these in `.env.local` or your host dashboard (**values not listed here**):
 
-When `PAYPAL_SANDBOX_CLIENT_ID` and `PAYPAL_SANDBOX_CLIENT_SECRET` are missing or still placeholders, the app stays in **demo mode** automatically. API base for sandbox is always `https://api-m.sandbox.paypal.com` unless you opt into live via `PAYPAL_ENV=live` (hackathon: stay on sandbox).
+   | Variable | Purpose |
+   |----------|---------|
+   | `PAYPAL_SANDBOX_CLIENT_ID` | Sandbox REST app Client ID |
+   | `PAYPAL_SANDBOX_CLIENT_SECRET` | Sandbox REST app Secret |
+   | `PAYPAL_WEBHOOK_ID` | Webhook ID after registering your webhook URL |
+   | `APP_URL` | Public base URL (return/cancel URLs and webhook registration) |
+   | `LLM_API_KEY` | Optional — OpenAI-compatible key |
+   | `LLM_BASE_URL` | Optional — API base |
+   | `LLM_MODEL` | Optional — model name |
+   | `DEMO_MODE` | Optional — `true` forces mock PayPal |
 
-### PayPal sandbox smoke test (CLI)
+3. Register webhook: `https://<APP_URL>/api/webhooks/paypal` → event **`PAYMENT.CAPTURE.COMPLETED`**.
 
-With real sandbox credentials in `.env.local` (never commit):
+4. Verify CLI (prints **order ID and status only**):
 
-```bash
-npm run smoke:sandbox
-```
-
-Prints only JSON `{ "orderId", "status" }` after OAuth + Orders v2 create. Does not log secrets or access tokens.
-
-### PayPal sandbox webhook (production-like testing)
-
-1. In [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/), create a sandbox REST app and copy **Client ID** and **Secret**.
-2. Add them to `.env.local`.
-3. Expose your local server (or use your Render URL) and create a webhook pointing to:
-
-   `https://<your-host>/api/webhooks/paypal`
-
-4. Subscribe to **`PAYMENT.CAPTURE.COMPLETED`** (and related checkout events as needed).
-5. Copy the **Webhook ID** into `PAYPAL_WEBHOOK_ID`.
-
-Demo mode skips signature verification and accepts simulated events via `POST /api/demo/simulate-webhook`.
+   ```bash
+   npm run smoke:sandbox
+   ```
 
 ## Scripts
 
@@ -78,53 +117,58 @@ Demo mode skips signature verification and accepts simulated events via `POST /a
 |---------|-------------|
 | `npm run dev` | Dev server on port **43123** |
 | `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm test` | Vitest unit tests (quotes, webhooks, payment lifecycle) |
-| `npm run smoke:sandbox` | OAuth + create sandbox order (requires `PAYPAL_SANDBOX_*` in env) |
+| `npm run start` | Production server (port **43123**) |
+| `npm test` | Vitest (quotes, webhooks, payment lifecycle) |
+| `npm run smoke:sandbox` | Sandbox OAuth + Orders v2 create smoke test |
 
 ## Deploy on Render
 
-This repo includes [`render.yaml`](render.yaml). Connect the GitHub repo on Render, set the secret env vars in the dashboard, and deploy. Set `APP_URL` to your Render service URL before registering PayPal webhooks.
+[`render.yaml`](render.yaml) defines a **Web Service**:
 
-## Judge / reviewer test credentials (PayPal sandbox)
+| Setting | Value |
+|---------|--------|
+| **Build** | `npm ci && npm run build` |
+| **Start** | `npm run start` |
+| **Health check** | `/` |
 
-Add your sandbox **buyer** test account here before submission (PayPal provides these in the Developer Dashboard → Sandbox → Accounts):
+Steps:
+
+1. Connect this **private** GitHub repo in [Render](https://render.com).
+2. Use **Blueprint** / `render.yaml` or create a Node web service with the same build/start commands.
+3. Set secret env vars in Render (**`PAYPAL_SANDBOX_*`**, `PAYPAL_WEBHOOK_ID`, `APP_URL`, optional `LLM_API_KEY`).
+4. Set `APP_URL` to your `https://<service>.onrender.com` URL and update PayPal app return URLs and webhook.
+
+SQLite data is stored on the instance filesystem (`./data/`); for production persistence, plan a managed volume or database migration.
+
+## Judge sandbox buyer account
+
+> **TODO (maintainer):** Add PayPal Developer → Sandbox → **Personal / Buyer** test credentials here before judges test live Smart Buttons. **Do not commit real passwords to git**—prefer sharing via Devpost “testing credentials” field if the rules allow, and keep README to placeholders only.
 
 | Role | Email | Password |
 |------|-------|----------|
-| Sandbox buyer | `buyer@example.com` | `(set before Devpost submission)` |
-| Sandbox seller | `(your business sandbox email)` | `(not shared publicly)` |
+| Sandbox buyer | `TODO@sandbox.paypal.com` | `TODO` |
+| Notes | | Use with PayPal sandbox checkout only |
 
-Judges can use **demo mode** without credentials, or log into PayPal sandbox as the buyer when testing live Smart Buttons.
+Judges can also use **demo mode** (no PayPal login) to complete the full UI flow.
 
-> Replace placeholder buyer credentials with real sandbox buyer email/password from your PayPal Developer sandbox before the Devpost deadline.
+## Documentation
 
-## Architecture
-
-```text
-Lead chat → Agent (LLM or rules) → Quote engine (guardrails)
-    → POST /api/paypal/orders (create order + approve link)
-    → PayPal JS SDK, redirect approve link, or demo capture
-    → /checkout/return (capture after redirect)
-    → POST /api/webhooks/paypal (verified) → SQLite lead status = paid → onboarding step
-```
-
-Local data is stored in `./data/leads.db` (gitignored).
-
-## Sponsor integrations
-
-- **PayPal** — Orders v2 checkout, webhook verification, sandbox-only
-- **AG Grid** — Leads dashboard table
-- **Render** — `render.yaml` for one-click deploy
-
-## Demo video outline
-
-See [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for a ≤3 minute recording beat sheet.
+| File | Purpose |
+|------|---------|
+| [`docs/DEVPOST.md`](docs/DEVPOST.md) | Devpost submission copy |
+| [`docs/VIDEO-SCRIPT.md`](docs/VIDEO-SCRIPT.md) | ≤2:30 demo video script |
+| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | Extended beat sheet |
 
 ## Security
 
-- No secrets in the repository—only `.env.example`
-- Run a secret scan before release: `gitleaks detect --source . --verbose`
+- Repository contains **`.env.example` only** (placeholder names).
+- Scan: `gitleaks detect --source . --verbose`
+
+## Sponsor fit
+
+- **PayPal** — Orders v2 + verified webhooks  
+- **AG Grid** (community) — leads dashboard  
+- **Render** — `render.yaml` deploy  
 
 ## License
 
